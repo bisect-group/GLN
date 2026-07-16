@@ -13,9 +13,16 @@ For rdkit, we tested with [2019_03_3](https://github.com/rdkit/rdkit/releases/ta
 
 For pytorch, we tested from 1.2.0 to 1.3.1. Please don't use versions older than that, as this package contains c++ customized ops which relies on specific toolchains from pytorch.
 
-After the above preparation, simply navigate to the project root folder and install:
+After the above preparation, simply navigate to the project root folder and install.
+The native extensions are built against PyTorch's C++ ABI, so this checkout
+pins the build environment to PyTorch 2.12.1.  Keep `setup.py` and
+`pyproject.toml` synchronized if that version changes.
 
     cd GLN
+    pip install .
+
+For editable development installs, use:
+
     pip install -e .
 
 Note that by default the cuda ops will not be enabled on Mac OSX.

@@ -126,7 +126,10 @@ class ReadoutNet(nn.Module):
 
          
 def scatter_max(src, index, dim=-1, out=None, dim_size=None, fill_value=0):
-    return orig_smax(src, index, dim, out, dim_size, fill_value)[0]
+    # torch_scatter 2.1 removed the positional ``fill_value`` argument.
+    # GLN's readout path uses the historical default (0), so the current API
+    # call preserves its behavior while remaining compatible with torch 2.12.
+    return orig_smax(src, index, dim, out, dim_size)[0]
 
 
 def scatter_min(src, index, dim=-1, out=None, dim_size=None, fill_value=0):

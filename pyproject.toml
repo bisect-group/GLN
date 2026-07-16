@@ -1,0 +1,10 @@
+[build-system]
+# setup.py imports torch while declaring the C++/CUDA extensions.  Without
+# this, pip builds in an isolated environment that cannot import torch before
+# it can even determine the wheel requirements.
+requires = [
+    "setuptools>=64",
+    "wheel",
+    "torch==2.12.1",
+]
+build-backend = "setuptools.build_meta"

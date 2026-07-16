@@ -16,11 +16,11 @@ torch::Tensor jagged_log_softmax_forward_cuda(torch::Tensor logits, torch::Tenso
     prefix_sum = make_contiguous(prefix_sum);    
     auto output = torch::zeros_like(logits);
     int64_t bsize = prefix_sum.sizes()[0];
-    int64_t* ps = prefix_sum.data<int64_t>();
+    int64_t* ps = prefix_sum.data_ptr<int64_t>();
 
-    AT_DISPATCH_FLOATING_TYPES(logits.type(), "jagged_log_softmax_forward_cuda", ([&] {        
-        HostLogSoftmaxForward(logits.data<scalar_t>(),
-                              output.data<scalar_t>(),                               
+    AT_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "jagged_log_softmax_forward_cuda", ([&] {
+        HostLogSoftmaxForward(logits.data_ptr<scalar_t>(),
+                              output.data_ptr<scalar_t>(),
                               ps, bsize);
     }));
     return output;
@@ -35,11 +35,11 @@ torch::Tensor jagged_log_softmax_backward_cuda(torch::Tensor output, torch::Tens
     auto grad_input = torch::zeros_like(output);
 
     int64_t bsize = prefix_sum.sizes()[0];
-    int64_t* ps = prefix_sum.data<int64_t>();
-    AT_DISPATCH_FLOATING_TYPES(output.type(), "jagged_log_softmax_backward_cuda", ([&] {        
-        HostLogSoftmaxBackward(grad_output.data<scalar_t>(),
-                               grad_input.data<scalar_t>(),
-                               output.data<scalar_t>(),
+    int64_t* ps = prefix_sum.data_ptr<int64_t>();
+    AT_DISPATCH_FLOATING_TYPES(output.scalar_type(), "jagged_log_softmax_backward_cuda", ([&] {
+        HostLogSoftmaxBackward(grad_output.data_ptr<scalar_t>(),
+                               grad_input.data_ptr<scalar_t>(),
+                               output.data_ptr<scalar_t>(),
                                ps, bsize);
     }));
     return grad_input;

@@ -17,7 +17,7 @@ torch::Tensor make_contiguous(torch::Tensor& t)
 template<typename scalar_t>
 void impl_jagged_log_softmax_forward(scalar_t *input_data_base, scalar_t *output_data_base, torch::Tensor prefix_sum)
 {
-    int64_t *ps = prefix_sum.data<int64_t>();
+    int64_t *ps = prefix_sum.data_ptr<int64_t>();
     int64_t bsize = prefix_sum.sizes()[0];
     int64_t i, d;
     
@@ -54,9 +54,9 @@ torch::Tensor jagged_log_softmax_forward(torch::Tensor logits, torch::Tensor pre
     logits = make_contiguous(logits);
     prefix_sum = make_contiguous(prefix_sum);
     auto output = torch::zeros_like(logits);
-    AT_DISPATCH_FLOATING_TYPES(logits.type(), "jagged_log_softmax_forward", ([&] {
-        impl_jagged_log_softmax_forward(logits.data<scalar_t>(), 
-                                        output.data<scalar_t>(),                                         
+    AT_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "jagged_log_softmax_forward", ([&] {
+        impl_jagged_log_softmax_forward(logits.data_ptr<scalar_t>(),
+                                        output.data_ptr<scalar_t>(),
                                         prefix_sum);
     }));
     return output;
@@ -65,7 +65,7 @@ torch::Tensor jagged_log_softmax_forward(torch::Tensor logits, torch::Tensor pre
 template<typename scalar_t>
 void impl_jagged_log_softmax_backward(scalar_t *output_data_base, scalar_t *gradOutput_data_base, torch::Tensor prefix_sum, scalar_t *gradInput_data_base)
 {
-    int64_t *ps = prefix_sum.data<int64_t>();
+    int64_t *ps = prefix_sum.data_ptr<int64_t>();
     int64_t bsize = prefix_sum.sizes()[0];
     int64_t i, d;
 
@@ -98,11 +98,11 @@ torch::Tensor jagged_log_softmax_backward(torch::Tensor output, torch::Tensor gr
 
     auto grad_input = torch::zeros_like(output);
 
-    AT_DISPATCH_FLOATING_TYPES(output.type(), "jagged_log_softmax_backward", ([&] {
-        impl_jagged_log_softmax_backward(output.data<scalar_t>(), 
-                                         grad_output.data<scalar_t>(), 
+    AT_DISPATCH_FLOATING_TYPES(output.scalar_type(), "jagged_log_softmax_backward", ([&] {
+        impl_jagged_log_softmax_backward(output.data_ptr<scalar_t>(),
+                                         grad_output.data_ptr<scalar_t>(),
                                          prefix_sum,
-                                         grad_input.data<scalar_t>());
+                                         grad_input.data_ptr<scalar_t>());
     }));
 
     return grad_input;

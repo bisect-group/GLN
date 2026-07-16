@@ -1,4 +1,5 @@
-from setuptools import setup
+from setuptools import find_packages, setup
+import torch
 from torch.utils.cpp_extension import CppExtension, BuildExtension, CUDAExtension
 
 from distutils.command.build import build
@@ -24,10 +25,11 @@ ext_modules=[CppExtension('extlib',
                           extra_link_args=link_args)]
 
 # build cuda lib
-import torch
 if torch.cuda.is_available():
     ext_modules.append(CUDAExtension('extlib_cuda',
-                                    ['gln/mods/torchext/src/extlib_cuda.cpp', 'gln/mods/torchext/src/extlib_cuda_kernels.cu']))
+                                    ['gln/mods/torchext/src/extlib_cuda.cpp', 'gln/mods/torchext/src/extlib_cuda_kernels.cu'],
+                                    extra_compile_args=compile_args,
+                                    extra_link_args=link_args))
 
 class custom_develop(develop):
     def run(self):
@@ -45,10 +47,13 @@ class custom_develop(develop):
         super().run()
 
 setup(name='gln',
-      py_modules=['gln'],
+      packages=find_packages(include=('gln', 'gln.*')),
       ext_modules=ext_modules,
       install_requires=[
-          'torch',
+          # Native extensions are compiled against PyTorch's C++ ABI.  Keep
+          # this in lockstep with pyproject.toml's isolated-build dependency.
+          'torch==2.12.1',
+          'rich>=13',
       ],
       cmdclass={
           'develop': custom_develop,
