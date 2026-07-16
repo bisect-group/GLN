@@ -36,7 +36,7 @@ def load_raw_reacts(name):
     with open(csv_file, 'r') as f:
         reader = csv.reader(f)
         header = next(reader)        
-        for row in tqdm(reader):
+        for row in tqdm(reader, desc=f'Load {name} reactions', unit='reaction'):
             reactions.append((row[1], row[2]))
     print('num %s:' % name, len(reactions))
     return reactions
@@ -71,7 +71,7 @@ def eval_model(phase, model, fname_pred):
     cnt = 0
     topk_scores = [0.0] * cmd_args.topk
     
-    pbar = tqdm(case_gen)
+    pbar = tqdm(case_gen, desc=f'Evaluate {phase} reactions', unit='reaction')
 
     fpred = open(fname_pred, 'w')
     for rxn_type, rxn, raw_prod in pbar:

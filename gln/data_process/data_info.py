@@ -33,7 +33,7 @@ def load_center_maps(fname):
         reader = csv.reader(f)
         header = next(reader)
 
-        for row in tqdm(reader):
+        for row in tqdm(reader, desc='Load product center maps', unit='record'):
             smiles, rxn_type, indices = row
             indices = [int(t) for t in indices.split()]
             prod_center_maps[(rxn_type, smiles)] = indices
@@ -102,7 +102,7 @@ class DataInfo(object):
             with open(os.path.join(file_root, fname), 'r') as f:
                 reader = csv.reader(f)
                 header = next(reader)
-                for row in tqdm(reader):
+                for row in tqdm(reader, desc='Load negative reaction map', unit='record'):
                     sample_idx, reacts = row
                     if not reacts in cls.neg_reacts_ids:
                         idx = len(cls.neg_reacts_ids)
@@ -138,7 +138,7 @@ class DataInfo(object):
             header = next(reader)
             tpl_idx = header.index('retro_templates')
             rt_idx = header.index('class')
-            for row in tqdm(reader):
+            for row in tqdm(reader, desc='Load unique templates', unit='template'):
                 tpl = row[tpl_idx]
                 center, r_a, r_c = tpl.split('>')
                 if smarts_has_useless_parentheses(center):

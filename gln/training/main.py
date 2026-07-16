@@ -37,7 +37,7 @@ def main_train():
 
     for epoch in range(cmd_args.num_epochs):
 
-        pbar = tqdm(range(1, 1 + cmd_args.iters_per_val))
+        pbar = tqdm(range(1, 1 + cmd_args.iters_per_val), desc=f'Train epoch {epoch}', unit='iteration')
         
         for it in pbar:
             samples = [next(train_sample_gen) for _ in range(cmd_args.batch_size)]

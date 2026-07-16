@@ -37,6 +37,7 @@ cmd_opt.add_argument('-neg_num', default=-1, type=int, help='num of negative sam
 cmd_opt.add_argument('-beam_size', default=1, type=int, help='beam search size')
 cmd_opt.add_argument('-gm', default='mean_field', help='choose gnn module')
 cmd_opt.add_argument('-fp_degree', default=0, type=int, help='fingerprint? [>0, 0]')
+cmd_opt.add_argument('-graph_dump_kind', default='all', choices=['all', 'molecules', 'smarts', 'negative'])
 
 cmd_opt.add_argument('-latent_dim', default=64, type=int, help='latent dim of gnn')
 cmd_opt.add_argument('-embed_dim', default=128, type=int, help='embedding dim of gnn')

@@ -97,7 +97,7 @@ if __name__ == '__main__':
             part_tasks.append((i, train_reactions[i]))
 
         pool = multiprocessing.Pool(cmd_args.num_cores)
-        for result in tqdm(pool.imap_unordered(find_tpls, part_tasks), total=len(idx_range)):
+        for result in tqdm(pool.imap_unordered(find_tpls, part_tasks), total=len(idx_range), desc=f'Build reaction graph part {pid}', unit='reaction'):
             if result is None:
                 continue
             idx, pos_tpl_idx, neg_reactions = result

@@ -57,7 +57,7 @@ if __name__ == '__main__':
         reader = csv.reader(f, delimiter='\t')
         header = next(reader)
         print(header)
-        pbar = tqdm(reader)
+        pbar = tqdm(reader, desc='Clean USPTO reactions', unit='reaction')
         bad_rxn = 0
         for row in pbar:
             rxn_smiles = row[header.index('ReactionSmiles')]

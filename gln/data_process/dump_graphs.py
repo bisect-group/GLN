@@ -21,7 +21,12 @@ if __name__ == '__main__':
         SmilesMols.set_fp_degree(cmd_args.fp_degree)
         SmartsMols.set_fp_degree(cmd_args.fp_degree)
 
-    if cmd_args.retro_during_train:
+    # ``all`` preserves the historical behavior; the named variants make
+    # independently resumable graph-cache stages possible.
+    graph_kind = getattr(cmd_args, 'graph_dump_kind', 'all')
+    if graph_kind not in ('all', 'molecules', 'smarts', 'negative'):
+        raise ValueError('unknown graph dump kind: %s' % graph_kind)
+    if graph_kind == 'negative' or (graph_kind == 'all' and cmd_args.retro_during_train):
         part_folder = os.path.join(file_root, 'np-%d' % cmd_args.num_parts)
         if cmd_args.part_num > 0:
             prange = range(cmd_args.part_id, cmd_args.part_id + cmd_args.part_num)
@@ -31,7 +36,7 @@ if __name__ == '__main__':
             with open(os.path.join(part_folder, 'neg_reacts-part-%d.csv' % pid), 'r') as f:
                 reader = csv.reader(f)
                 header = next(reader)
-                for row in tqdm(reader):
+                for row in tqdm(reader, desc=f'Build negative graphs part {pid}', unit='reaction'):
                     reacts = row[-1]
                     for t in reacts.split('.'):
                         SmilesMols.get_mol_graph(t)
@@ -50,10 +55,12 @@ if __name__ == '__main__':
         react_cano_smarts = [row.strip() for row in f.readlines()]
 
 
-    for mol in tqdm(smiles_cano_map):
-        SmilesMols.get_mol_graph(smiles_cano_map[mol])
-    SmilesMols.save_dump(os.path.join(cmd_args.save_dir, '../graph_smiles'))
+    if graph_kind in ('all', 'molecules'):
+        for mol in tqdm(smiles_cano_map, desc='Build molecular graph cache', unit='molecule'):
+            SmilesMols.get_mol_graph(smiles_cano_map[mol])
+        SmilesMols.save_dump(os.path.join(cmd_args.save_dir, '../graph_smiles'))
 
-    for smarts in tqdm(prod_cano_smarts + react_cano_smarts):
-        SmartsMols.get_mol_graph(smarts)
-    SmartsMols.save_dump(cmd_args.save_dir + '/graph_smarts')
+    if graph_kind in ('all', 'smarts'):
+        for smarts in tqdm(prod_cano_smarts + react_cano_smarts, desc='Build SMARTS graph cache', unit='SMARTS'):
+            SmartsMols.get_mol_graph(smarts)
+        SmartsMols.save_dump(cmd_args.save_dir + '/graph_smarts')

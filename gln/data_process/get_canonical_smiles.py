@@ -18,7 +18,7 @@ def process_smiles():
     all_symbols = set()
 
     smiles_cano_map = {}
-    for rxn in tqdm(rxn_smiles):
+    for rxn in tqdm(rxn_smiles, desc='Canonicalize reaction SMILES', unit='reaction'):
         reactants, _, prod = rxn.split('>')
         mols = reactants.split('.') + [prod]
         for sm in mols:
@@ -54,7 +54,7 @@ if __name__ == '__main__':
             reader = csv.reader(f)
             header = next(reader)
             rxn_idx = header.index('reactants>reagents>production')
-            for row in tqdm(reader):
+            for row in tqdm(reader, desc='Load raw reactions', unit='reaction'):
                 rxn_smiles.append(row[rxn_idx])
 
     process_smiles()

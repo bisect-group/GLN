@@ -47,7 +47,7 @@ if __name__ == '__main__':
         prod_cano_smarts = [row.strip() for row in f.readlines()]
 
     prod_center_mols = []
-    for sm in tqdm(prod_cano_smarts):
+    for sm in tqdm(prod_cano_smarts, desc='Build product center molecules', unit='SMARTS'):
         prod_center_mols.append((sm, Chem.MolFromSmarts(sm)))
 
     print('num of prod centers', len(prod_center_mols))
@@ -87,7 +87,7 @@ if __name__ == '__main__':
             header = next(reader)
             rxn_idx = header.index('reactants>reagents>production')
             type_idx = header.index('class')            
-            for row in tqdm(reader):
+            for row in tqdm(reader, desc='Load reaction center inputs', unit='reaction'):
                 rxn_smiles.append((row[type_idx], row[rxn_idx]))
 
         part_size = min(len(rxn_smiles) // num_parts + 1, len(rxn_smiles))
@@ -102,7 +102,7 @@ if __name__ == '__main__':
                 rxn_type, rxn = rxn_smiles[idx]
                 reactants, _, prod = rxn.split('>')
                 tasks.append((i, rxn_type, prod))                
-            for result in tqdm(pool.imap_unordered(find_edges, tasks), total=len(tasks)):
+            for result in tqdm(pool.imap_unordered(find_edges, tasks), total=len(tasks), desc=f'Find centers ({out_phase})', unit='reaction'):
                 i, rxn_type, smiles, centers = result
                 local_results[i] = (rxn_type, smiles, centers)
             out_folder = os.path.join(cmd_args.save_dir, 'np-%d' % num_parts)

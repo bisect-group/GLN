@@ -19,7 +19,7 @@ def process_centers():
     react_cano_smarts = set()
 
     smarts_cano_map = {}
-    pbar = tqdm(retro_templates)
+    pbar = tqdm(retro_templates, desc='Canonicalize reaction SMARTS', unit='template')
     for template in pbar:
         sm_prod, _, sm_react = template.split('>')
         if smarts_has_useless_parentheses(sm_prod):
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         reader = csv.reader(f)
         header = next(reader)
 
-        for row in tqdm(reader):
+        for row in tqdm(reader, desc='Load reaction templates', unit='template'):
             retro_templates.append(row[header.index('retro_templates')])
 
     raw_data_root = os.path.join(cmd_args.dropbox, cmd_args.data_name)
@@ -64,7 +64,7 @@ if __name__ == '__main__':
             reader = csv.reader(f)
             header = next(reader)
             rxn_idx = header.index('reactants>reagents>production')
-            for row in tqdm(reader):
+            for row in tqdm(reader, desc=f'Load {phase} reactions', unit='reaction'):
                 rxn_smiles.append(row[rxn_idx])
 
     process_centers()

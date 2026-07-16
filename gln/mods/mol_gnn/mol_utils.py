@@ -131,6 +131,11 @@ class _MolHolder(object):
         if mol is None:            
             return None
         else:
+            # RDKit 2026 does not initialize implicit-valence properties for
+            # SMARTS query atoms.  GLN's feature encoder reads those
+            # properties even for unsanitized query molecules.
+            if not self.sanitized:
+                mol.UpdatePropertyCache(strict=False)
             mg = MolGraph(name, self.sanitized, mol=mol)
             if self.fp_degree > 0:
                 bi = {} if self.fp_info else None

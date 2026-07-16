@@ -19,7 +19,7 @@ if __name__ == '__main__':
         reader = csv.reader(f)
         header = next(reader)
         print(header)
-        for row in tqdm(reader):
+        for row in tqdm(reader, desc='Count extracted templates', unit='template'):
             tpl = row[header.index('retro_templates')]
             rxn_type = row[header.index('class')]
             tpl_types[tpl].add(rxn_type)

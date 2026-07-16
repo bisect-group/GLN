@@ -34,14 +34,14 @@ if __name__ == '__main__':
 
     pool = multiprocessing.Pool(cmd_args.num_cores)
     tasks = []
-    for idx, row in tqdm(enumerate(rows)):
+    for idx, row in tqdm(enumerate(rows), total=len(rows), desc='Queue template extraction', unit='reaction'):
         row_idx, _, rxn_smiles = row
         tasks.append((idx, row_idx, rxn_smiles))
 
     fout, writer = get_writer('proc_train_singleprod.csv', ['id', 'class', 'rxn_smiles', 'retro_templates'])
     fout_failed, failed_writer = get_writer('failed_template.csv', ['id', 'class', 'rxn_smiles', 'err_msg'])
 
-    for result in tqdm(pool.imap_unordered(get_tpl, tasks), total=len(tasks)):
+    for result in tqdm(pool.imap_unordered(get_tpl, tasks), total=len(tasks), desc='Extract reaction templates', unit='reaction'):
         idx, template = result
         row_idx, rxn_type, rxn_smiles = rows[idx]
 
