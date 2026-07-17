@@ -13,6 +13,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -25,11 +26,17 @@ from .native_preflight import ensure_native, write_manifest
 from .shared_cache import CACHE_SCHEMA, build_inventory, cache_fingerprint
 
 ALL_SPLITS = ("random_splits_grouped_rxn_smiles", "uniprot_time_splits", "drfp_tanimoto_splits")
+TRAINING_MARKER = "train.complete.json"
+FINAL_TRAIN_CHECKPOINT = Path("model-9.dump") / "model.dump"
 
 _active_children: dict[int, subprocess.Popen] = {}
 _children_lock = threading.RLock()
 _interrupt_requested = threading.Event()
 _TQDM_PROGRESS = re.compile(r"(?P<percent>\d{1,3})%\|.*?(?P<completed>\d+)\s*/\s*(?P<total>\d+)")
+_EVALUATION_PROGRESS = re.compile(
+    r"(?:average score.*?:\s*(?::\s*)?)?(?P<completed>\d+)\s*(?:/\s*(?P<total>\d+)\s*)?reaction\b",
+    re.IGNORECASE,
+)
 
 
 def _register_child(process: subprocess.Popen) -> None:
@@ -133,6 +140,46 @@ def parse_ints(value: str) -> list[int]:
     return sorted(out)
 
 
+def _write_json_atomic(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=f".{path.name}.", delete=False) as stream:
+        json.dump(value, stream, indent=2)
+        stream.write("\n")
+        temporary = Path(stream.name)
+    temporary.replace(path)
+
+
+def mark_training_complete(run_dir: Path, checkpoint: Path, seed: int) -> None:
+    """Record a verified completed training stage before evaluation begins."""
+    if not checkpoint.is_file():
+        raise RuntimeError(f"training completed without final checkpoint: {checkpoint}")
+    _write_json_atomic(
+        run_dir / TRAINING_MARKER,
+        {
+            "checkpoint": str(checkpoint),
+            "seed": seed,
+            "completed_at": time.time(),
+        },
+    )
+
+
+def completed_training_checkpoint(run_dir: Path, *, adopt_legacy: bool) -> Path | None:
+    """Return a completed-training checkpoint, optionally adopting old runs."""
+    marker = run_dir / TRAINING_MARKER
+    try:
+        checkpoint = Path(json.loads(marker.read_text())["checkpoint"])
+        if checkpoint.is_file():
+            return checkpoint
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        pass
+
+    checkpoint = run_dir / "train" / FINAL_TRAIN_CHECKPOINT
+    if adopt_legacy and checkpoint.is_file():
+        mark_training_complete(run_dir, checkpoint, seed=-1)
+        return checkpoint
+    return None
+
+
 @dataclass(frozen=True)
 class Job:
     split: str
@@ -153,6 +200,14 @@ def parse_tqdm_progress(line: str) -> tuple[int, int, int] | None:
     if match is None:
         return None
     return tuple(int(match.group(name)) for name in ("percent", "completed", "total"))
+
+
+def parse_evaluation_progress(line: str) -> tuple[int, int | None] | None:
+    """Return completed and optional total from native or wrapper evaluation output."""
+    match = _EVALUATION_PROGRESS.search(line)
+    if match is None:
+        return None
+    return int(match.group("completed")), int(match.group("total")) if match.group("total") else None
 
 
 def initial_stage(phase: str) -> StageInfo:
@@ -182,7 +237,21 @@ def classify_stage(phase: str, line: str) -> StageInfo | None:
     if re.search(r"(?:train epoch|\bepoch\s+\d+(?:\.\d+)?[, ])", text):
         return StageInfo("Train", "optimization", "GPU")
 
-    if "evaluate val reactions" in text or "evaluate test reactions" in text:
+    if "evaluation cpu cache lookup" in text:
+        return StageInfo("Evaluate", "template cache lookup", "CPU / disk")
+    if "evaluation cache wait" in text:
+        return StageInfo("Evaluate", "waiting for shared template cache", "CPU / disk")
+    if "evaluation cpu rdchiral" in text:
+        return StageInfo("Evaluate", "RDChiral template application", "CPU")
+    if "evaluation resumed" in text:
+        return StageInfo("Evaluate", "resuming verified reaction results", "disk")
+    if "evaluation gpu center/template ranking" in text:
+        return StageInfo("Evaluate", "center/template ranking", "GPU")
+    if "evaluation gpu reactant scoring" in text:
+        return StageInfo("Evaluate", "reactant candidate scoring", "GPU")
+    if "evaluation progress" in text and "waits=" in text:
+        return StageInfo("Evaluate", "completed reaction / cache stats", "CPU")
+    if "evaluation progress" in text or "average score" in text or "evaluate val reactions" in text or "evaluate test reactions" in text:
         return StageInfo("Evaluate", "reaction inference", "GPU")
     if re.search(r"load (?:val|test) reactions", text) or re.search(r"loading raw (?:val|test)", text):
         return StageInfo("Evaluate", "loading evaluation reactions", "CPU / disk")
@@ -236,8 +305,15 @@ class PlainReporter:
             if now - self._last_progress.get(key, 0.0) >= 0.5 or progress[0] >= 100:
                 self._write(key, f"{stage.lifecycle} | {stage.stage} | {stage.resource}: {progress[0]}% ({progress[1]}/{progress[2]})")
                 self._last_progress[key] = now
-        elif verbose and line:
-            self._write(key, f"{stage.lifecycle} | {stage.stage}: {line}")
+        else:
+            completed = parse_evaluation_progress(line)
+            if completed is not None:
+                now = time.monotonic()
+                if now - self._last_progress.get(key, 0.0) >= 0.5:
+                    self._write(key, f"{stage.lifecycle} | {stage.stage} | {stage.resource}: {completed:,} reactions")
+                    self._last_progress[key] = now
+            elif verbose and line:
+                self._write(key, f"{stage.lifecycle} | {stage.stage}: {line}")
 
     def waiting(self, key: str, phase: str) -> None:
         stage = self._stages.get(key, initial_stage(phase))
@@ -310,12 +386,29 @@ class RichReporter:
                 if now - self._last_progress.get(key, 0.0) >= 0.1 or percent >= 100:
                     self._progress.update(task_id, total=total, completed=completed, progress=f"{completed:,}/{total:,}")
                     self._last_progress[key] = now
-            elif verbose and line:
-                self._progress.update(task_id, progress=line[-80:])
+            else:
+                evaluation_progress = parse_evaluation_progress(line)
+                if evaluation_progress is not None:
+                    completed, total = evaluation_progress
+                    now = time.monotonic()
+                    if now - self._last_progress.get(key, 0.0) >= 0.1:
+                        cache_status = ""
+                        cache_match = re.search(r"cache hits=(\d+) misses=(\d+).*?hit_rate=([0-9.]+%)", line)
+                        if cache_match:
+                            cache_status = f" | cache {cache_match.group(1)}H/{cache_match.group(2)}M ({cache_match.group(3)})"
+                        detail = line.split(";", 1)[1].strip() if ";" in line else ""
+                        self._progress.update(task_id, total=total, completed=completed if total else 0,
+                                              progress=((f"{completed:,}/{total:,} reactions" if total else f"{completed:,} reactions") + cache_status + (f" | {detail}" if detail else "")))
+                        self._last_progress[key] = now
+                elif verbose and line:
+                    self._progress.update(task_id, progress=line[-80:])
 
     def waiting(self, key: str, phase: str) -> None:
         with self._lock:
-            self._progress.update(self._task_ids[key], progress="waiting for output")
+            task = self._progress.tasks[self._task_ids[key]]
+            current = task.fields.get("progress", "")
+            suffix = "no new child output for 20s"
+            self._progress.update(self._task_ids[key], progress=f"{current} | {suffix}" if current else suffix)
 
     def finish(self, key: str, status: str) -> None:
         with self._lock:
@@ -348,10 +441,34 @@ def run_cmd(cmd: list[str], cwd: Path, log: Path, env: dict[str, str], reporter:
             selector = selectors.DefaultSelector()
             selector.register(process.stdout, selectors.EVENT_READ)
             buffer = ""
+            last_wait_report = time.monotonic()
             while selector.get_map():
-                events = selector.select(timeout=20.0)
+                if _interrupt_requested.is_set():
+                    # The child is its own session.  Give it a brief chance to
+                    # flush its journal, then prevent one stuck native worker
+                    # from holding the whole benchmark runner hostage.
+                    try:
+                        os.killpg(os.getpgid(process.pid), signal.SIGINT)
+                    except (OSError, ProcessLookupError):
+                        pass
+                    try:
+                        code = process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                        except (OSError, ProcessLookupError):
+                            pass
+                        code = process.wait()
+                    selector.close()
+                    process.stdout.close()
+                    return code
+                events = selector.select(timeout=1.0)
                 if not events:
-                    reporter.waiting(key, phase)
+                    # Keep the dashboard current without delaying Ctrl-C by a
+                    # 20-second select timeout.
+                    if time.monotonic() - last_wait_report >= 20:
+                        reporter.waiting(key, phase)
+                        last_wait_report = time.monotonic()
                     continue
                 for event_key, _ in events:
                     chunk = event_key.fileobj.read1(8192).decode(errors="replace")
@@ -400,44 +517,48 @@ def job_worker(job: Job, args: argparse.Namespace, repo: Path, reporter: JobRepo
     env["PYTHONWARNINGS"] = "ignore::FutureWarning"
     common = [sys.executable, "-m"]
     try:
+        completed_checkpoint = completed_training_checkpoint(
+            run_dir, adopt_legacy=args.resume or args.eval_only,
+        )
         if not args.eval_only:
-            train = common + ["emulator_bench.train", "--dropbox", str(dropbox), "--data-name", "reaction_outcome_dataset", "--save-dir", str(run_dir / "train"), "--gpu", "0", "--seed", str(job.seed)]
-            checkpoints = sorted((run_dir / "train").glob("model-*/model.dump"))
-            if args.resume and checkpoints:
-                train.extend(["--resume-from", str(checkpoints[-1])])
-            reporter.start(key, label, "train")
-            rc = run_cmd(train, repo, log, env, reporter, key, "train", args.dry_run, args.verbose)
-            if _interrupt_requested.is_set():
-                raise KeyboardInterrupt
-            if rc:
-                raise RuntimeError(f"training exited with {rc}")
+            if completed_checkpoint is None:
+                train = common + ["emulator_bench.train", "--dropbox", str(dropbox), "--data-name", "reaction_outcome_dataset", "--save-dir", str(run_dir / "train"), "--gpu", "0", "--seed", str(job.seed)]
+                checkpoints = sorted((run_dir / "train").glob("model-*/model.dump"))
+                if args.resume and checkpoints:
+                    train.extend(["--resume-from", str(checkpoints[-1])])
+                reporter.start(key, label, "train")
+                rc = run_cmd(train, repo, log, env, reporter, key, "train", args.dry_run, args.verbose)
+                if _interrupt_requested.is_set():
+                    raise KeyboardInterrupt
+                if rc:
+                    raise RuntimeError(f"training exited with {rc}")
+                if not args.dry_run:
+                    mark_training_complete(run_dir, run_dir / "train" / FINAL_TRAIN_CHECKPOINT, job.seed)
+                completed_checkpoint = run_dir / "train" / FINAL_TRAIN_CHECKPOINT
         if not args.train_only:
-            evaluate = common + ["emulator_bench.evaluate", "--dropbox", str(dropbox), "--data-name", "reaction_outcome_dataset", "--save-dir", str(run_dir / "train"), "--gpu", "0"]
+            if completed_checkpoint is None:
+                raise RuntimeError(
+                    f"evaluation requires completed final checkpoint: "
+                    f"{run_dir / 'train' / FINAL_TRAIN_CHECKPOINT}"
+                )
+            evaluate = common + ["emulator_bench.evaluate", "--dropbox", str(dropbox), "--data-name", "reaction_outcome_dataset", "--save-dir", str(run_dir / "train"), "--checkpoint", str(completed_checkpoint), "--gpu", "0", "--eval-workers", str(getattr(args, "eval_workers", 4)), "--evaluation-cache-root", str(getattr(args, "evaluation_cache_root", args.output_root / "evaluation_cache"))]
+            if getattr(args, "rebuild_evaluation_cache", False):
+                evaluate.append("--rebuild-evaluation-cache")
             reporter.start(key, label, "evaluate")
             rc = run_cmd(evaluate, repo, log, env, reporter, key, "evaluate", args.dry_run, args.verbose)
             if _interrupt_requested.is_set():
                 raise KeyboardInterrupt
             if rc:
                 raise RuntimeError(f"evaluation exited with {rc}")
-        best_val = None
-        for phase in ("val", "test"):
-            summaries = sorted((run_dir / "train").glob(f"{phase}-*.summary"))
-            if summaries:
-                text = summaries[-1].read_text()
+        if not args.train_only:
+            summary = run_dir / "train" / "test.summary"
+            if summary.exists():
+                text = summary.read_text()
                 for k in (1, 10):
                     match = re.search(rf"top {k}: ([0-9.]+)", text)
                     if match:
-                        record[f"{phase}_top{k}"] = float(match.group(1))
-                if phase == "val":
-                    candidates = []
-                    for summary in summaries:
-                        match = re.search(r"top 1: ([0-9.]+)", summary.read_text())
-                        if match:
-                            candidates.append((float(match.group(1)), summary.stem.replace("val-", "model-") + ".dump"))
-                    if candidates:
-                        best_val = max(candidates)[1]
-        if best_val:
-            record["selected_checkpoint"] = str(run_dir / "train" / best_val)
+                        record[f"test_top{k}"] = float(match.group(1))
+            record["selected_checkpoint"] = str(completed_checkpoint)
         record.update(status="complete", elapsed_seconds=time.time() - started)
     except KeyboardInterrupt:
         record.update(status="interrupted", error="interrupt requested", elapsed_seconds=time.time() - started)
@@ -479,6 +600,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--gpus", default="0,1,2,3")
     p.add_argument("--runs-per-gpu", type=int, default=2)
+    p.add_argument("--eval-workers", type=int, default=4, help="persistent RDChiral workers per active evaluation job")
+    p.add_argument("--evaluation-cache-root", type=Path, help="shared SQLite RDChiral cache root (default: schema-5/evaluation_cache)")
+    p.add_argument("--rebuild-evaluation-cache", action="store_true", help="discard the namespaced evaluation cache before evaluating")
     p.add_argument("--seeds", default="1,2,3")
     p.add_argument("--split-groups", nargs="+", default=["all"])
     p.add_argument("--dataset-root", type=Path, default=DEFAULT_ROOT)
@@ -502,6 +626,8 @@ def main() -> None:
         p.error("--runs-per-gpu must be positive")
     if args.num_cores < 1:
         p.error("--num-cores must be positive")
+    if args.eval_workers < 1:
+        p.error("--eval-workers must be positive")
     if args.train_only and args.eval_only:
         p.error("--train-only and --eval-only are mutually exclusive")
     groups = list(ALL_SPLITS) if "all" in args.split_groups else args.split_groups
@@ -514,6 +640,8 @@ def main() -> None:
     previous_signals = _install_signal_handlers()
     try:
         args.output_root = prepare_schema5_root(args.output_root, args.legacy_cache_policy)
+        if args.evaluation_cache_root is None:
+            args.evaluation_cache_root = args.output_root / "evaluation_cache"
         preflight_log = args.output_root / "logs" / "native_extension.log"
         lib = ensure_native(repo, preflight_log)
         write_manifest(args.output_root / "native_extension.json", lib)
@@ -575,6 +703,10 @@ def main() -> None:
         if args.prepare_only or _interrupt_requested.is_set():
             return
         slots = [gpu for gpu in gpus for _ in range(args.runs_per_gpu)]
+        evaluation_cpu = len(slots) * (args.eval_workers + 1)
+        available_cpu = os.cpu_count() or 1
+        if evaluation_cpu > available_cpu:
+            print(f"[evaluation warning] {len(slots)} active jobs x ({args.eval_workers} workers + parent) = {evaluation_cpu} CPU processes exceeds {available_cpu} available CPUs", flush=True)
         jobs = [Job(split, seed, slots[i % len(slots)]) for i, (split, seed) in enumerate(((s, seed) for s in groups for seed in seeds))]
         if args.dry_run:
             for job in jobs:
