@@ -22,4 +22,12 @@ OPENBLAS_NUM_THREADS="$CPU_THREADS" \
 NUMEXPR_NUM_THREADS="$CPU_THREADS" \
 python -m emulator_bench.run_all \
   --gpus 0,2,3 --runs-per-gpu 2 --seeds 666,777,888 \
-  --split-groups all --num-cores 64 --center-timeout 60 --resume
+  --split-groups all --num-cores 64 --center-timeout 60 \
+  --eval-workers 4 --resume
+
+# Resume/final-checkpoint-only evaluation with the shared persistent RDChiral cache.
+# The cache is schema/version namespaced and can safely be used by concurrent seeds.
+conda run -n test python -m emulator_bench.run_all \
+  --gpus 3 --runs-per-gpu 2 --seeds 666,777,888 \
+  --split-groups all --num-cores 64 --center-timeout 60 \
+  --eval-workers 4 --eval-only --resume

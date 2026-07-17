@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 
@@ -14,16 +11,22 @@ def main() -> None:
     p.add_argument("--save-dir", type=Path, required=True)
     p.add_argument("--checkpoint", type=Path)
     p.add_argument("--gpu", default="0")
+    p.add_argument("--eval-workers", type=int, default=4)
+    p.add_argument("--evaluation-cache-root", type=Path)
+    p.add_argument("--rebuild-evaluation-cache", action="store_true")
     args = p.parse_args()
-    repo = Path(__file__).resolve().parents[1]
-    cmd = [sys.executable, "gln/test/main_test.py", "-dropbox", str(args.dropbox), "-data_name", args.data_name, "-save_dir", str(args.save_dir), "-tpl_name", "default", "-f_atoms", str(args.dropbox / f"cooked_{args.data_name}" / "atom_list.txt"), "-topk", "50", "-beam_size", "50", "-gpu", str(args.gpu), "-num_parts", "1"]
-    if args.checkpoint:
-        cmd.extend(["-model_for_test", str(args.checkpoint)])
-    args.save_dir.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(repo) + os.pathsep + env.get("PYTHONPATH", "")
-    env["PYTHONWARNINGS"] = "ignore::FutureWarning"
-    subprocess.run(cmd, cwd=repo, env=env, check=True)
+    if args.checkpoint is None:
+        p.error("--checkpoint is required: benchmark evaluation always uses final model-9")
+    from .optimized_evaluator import main as optimized_main
+    import sys
+    sys.argv = [sys.argv[0], "--dropbox", str(args.dropbox), "--data-name", args.data_name,
+               "--save-dir", str(args.save_dir), "--checkpoint", str(args.checkpoint), "--gpu", str(args.gpu),
+               "--eval-workers", str(args.eval_workers)] + (
+        ["--evaluation-cache-root", str(args.evaluation_cache_root)] if args.evaluation_cache_root else []
+    ) + (
+        ["--rebuild-evaluation-cache"] if args.rebuild_evaluation_cache else []
+    )
+    optimized_main()
 
 
 if __name__ == "__main__":
