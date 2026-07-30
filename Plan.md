@@ -54,6 +54,6 @@
 2. Generate mapped GLN CSV views and manifests under the EMULaToR GLN baseline directory.
 3. Run schema-5 preprocessing once per split with `--legacy-cache-policy fresh`; quarantine schema-4 data and validate every stage before publishing `preprocess.complete`.
 4. Launch native GLN training with the original settings, AMP, checkpoint resume, and Rich progress.
-5. Evaluate native top-k plus top-1/top-10 metrics and write consolidated results.
+5. Evaluate native top-k plus top-1/top-10 metrics and write consolidated results; verify and aggregate final-checkpoint test artifacts with `python -m emulator_bench.aggregate_results`.
 6. Run Optuna only over safe training hyperparameters and distribute trials across requested GPUs.
 7. Run the small end-to-end smoke test with `CUDA_VISIBLE_DEVICES=3` in conda environment `test`.

@@ -20,4 +20,16 @@ Use `--eval-workers 4` (the default) to set persistent RDChiral workers per acti
 
 For the complete caching phase, run `CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.run_all --gpus 0 --split-groups all --num-cores 64 --center-timeout 60 --prepare-only --resume --legacy-cache-policy fresh`. Physical GPU 3 is exposed as local GPU 0; preprocessing remains CPU-only. Rerun with `--verify-cache-only` to validate manifests and native dumps without computing. Results are written to `results/per_job_metrics.jsonl`, `results/summary.csv`, and `results/summary_by_split.csv` for training runs.
 
+Run the standalone verifier/aggregator to rebuild reports from final-checkpoint
+evaluation artifacts:
+
+```bash
+conda run -n test python -m emulator_bench.aggregate_results \
+  --base-dir /home/adhil/github/EMULaToR/data/processed/baselines/GLN
+```
+
+It validates `evaluation.complete.json`, `test.partial.jsonl`, `test.pred`, and
+`test.summary`, then writes verified reports under `schema-5/aggregated_metrics`.
+Use `--strict` to fail after reporting incomplete or inconsistent runs.
+
 The input master and split parquet files must contain `atom_mapped_rxn_smiles`; the adapter deliberately does not run a mapper or substitute unmapped reactions.

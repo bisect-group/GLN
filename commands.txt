@@ -31,3 +31,7 @@ conda run -n test python -m emulator_bench.run_all \
   --gpus 3 --runs-per-gpu 2 --seeds 666,777,888 \
   --split-groups all --num-cores 64 --center-timeout 60 \
   --eval-workers 4 --eval-only --resume
+
+# Rebuild verified final-checkpoint test reports from schema-5 artifacts.
+conda run -n test python -m emulator_bench.aggregate_results \
+  --base-dir /home/adhil/github/EMULaToR/data/processed/baselines/GLN
