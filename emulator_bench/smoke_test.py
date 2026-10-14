@@ -11,7 +11,7 @@ from .dataset_adapter import DEFAULT_BASELINES, DEFAULT_ROOT, prepare
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--split-group", default="random_splits_grouped_rxn_smiles")
+    p.add_argument("--split-group", default="random_splits_grouped_rxn_key")
     p.add_argument("--dataset-root", type=Path, default=DEFAULT_ROOT)
     p.add_argument("--output-root", type=Path, default=DEFAULT_BASELINES)
     p.add_argument("--gpu", default="3")

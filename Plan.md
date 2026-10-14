@@ -31,7 +31,7 @@
 
 ## 5. Dataset and Split Mapping
 
-- Use `random_splits_grouped_rxn_smiles` (41,108 rows), `uniprot_time_splits` (41,108 rows), and `drfp_tanimoto_splits/threshold_0.11` (39,732 rows).
+- Use `random_splits_grouped_rxn_key` (41,108 rows), `uniprot_time_splits` (41,108 rows), and `drfp_tanimoto_splits/threshold_0.11` (39,732 rows).
 - Do not use the stale `random_splits` directory.
 - Copy validated split views to `/home/adhil/github/EMULaToR/data/processed/baselines/GLN`.
 - Preserve atom maps supplied by the user; wrappers never run LocalMapper.

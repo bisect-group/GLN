@@ -2,7 +2,7 @@
 
 These wrappers preserve GLN's native mapped-reaction preprocessing, training, and retrosynthesis evaluation while materializing EMULaToR split-specific views and manifests.
 
-The refreshed dataset uses `random_splits_grouped_rxn_smiles`, `uniprot_time_splits`, and `drfp_tanimoto_splits/threshold_0.11`. The old `random_splits` directory is stale and is not used. Atom maps are read from `atom_mapped_rxn_smiles`; LocalMapper is never called. Rows with failed atom mapping are excluded and recorded in `manifest.json`. A template-extraction failure is audited instead: it never rewrites or removes a row from any raw split view.
+The refreshed dataset uses `random_splits_grouped_rxn_key`, `uniprot_time_splits`, and `drfp_tanimoto_splits/threshold_0.11`. The old `random_splits` directory is stale and is not used. Atom maps are read from `atom_mapped_rxn_smiles`; LocalMapper is never called. Rows with failed atom mapping are excluded and recorded in `manifest.json`. A template-extraction failure is audited instead: it never rewrites or removes a row from any raw split view.
 
 Preprocessing uses the schema-5 cache contract. Each of the ten stages has a content-addressed manifest containing direct dependency keys, implementation/ABI identity where relevant, output SHA-256 and byte-size metadata, and validation results. Results are atomically published and verified before a cache hit is accepted. Schema-4 data is not adopted by default: `--legacy-cache-policy fresh` quarantines it and creates a clean `schema-5/namespaces/<split>` tree. `--resume` reuses validated stages, `--force-stage` invalidates only that node and true descendants, and `--verify-cache-only` performs no computation.
 

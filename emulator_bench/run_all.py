@@ -25,7 +25,7 @@ from .dataset_adapter import DEFAULT_BASELINES, DEFAULT_ROOT, prepare
 from .native_preflight import ensure_native, write_manifest
 from .shared_cache import CACHE_SCHEMA, build_inventory, cache_fingerprint
 
-ALL_SPLITS = ("random_splits_grouped_rxn_smiles", "uniprot_time_splits", "drfp_tanimoto_splits")
+ALL_SPLITS = ("random_splits_grouped_rxn_key", "uniprot_time_splits", "drfp_tanimoto_splits")
 TRAINING_MARKER = "train.complete.json"
 FINAL_TRAIN_CHECKPOINT = Path("model-9.dump") / "model.dump"
 

@@ -1,15 +1,15 @@
 # Environment
-conda run -n test python -m emulator_bench.dataset_adapter --split-group random_splits_grouped_rxn_smiles
+conda run -n test python -m emulator_bench.dataset_adapter --split-group random_splits_grouped_rxn_key
 
 # Prepare mapped raw views and native GLN caches
-conda run -n test python -m emulator_bench.cache_features --split-group random_splits_grouped_rxn_smiles
+conda run -n test python -m emulator_bench.cache_features --split-group random_splits_grouped_rxn_key
 
 # Train/evaluate on GPU 0
-CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.train --dropbox /home/adhil/github/EMULaToR/data/processed/baselines/GLN/dropbox --save-dir /home/adhil/github/EMULaToR/data/processed/baselines/GLN/runs/random_splits_grouped_rxn_smiles --gpu 0
-CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.evaluate --dropbox /home/adhil/github/EMULaToR/data/processed/baselines/GLN/dropbox --save-dir /home/adhil/github/EMULaToR/data/processed/baselines/GLN/eval/random_splits_grouped_rxn_smiles --checkpoint /path/to/model.dump --gpu 0
+CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.train --dropbox /home/adhil/github/EMULaToR/data/processed/baselines/GLN/dropbox --save-dir /home/adhil/github/EMULaToR/data/processed/baselines/GLN/runs/random_splits_grouped_rxn_key --gpu 0
+CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.evaluate --dropbox /home/adhil/github/EMULaToR/data/processed/baselines/GLN/dropbox --save-dir /home/adhil/github/EMULaToR/data/processed/baselines/GLN/eval/random_splits_grouped_rxn_key --checkpoint /path/to/model.dump --gpu 0
 
 # Adapter smoke test
-CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.smoke_test --split-group random_splits_grouped_rxn_smiles --gpu 3
+CUDA_VISIBLE_DEVICES=3 conda run -n test python -m emulator_bench.smoke_test --split-group random_splits_grouped_rxn_key --gpu 3
 
 # Full multi-GPU, multi-seed pipeline (2 concurrent jobs per GPU).
 # Change CPU_THREADS to tune every CPU thread pool; keep inter-op threads low.
